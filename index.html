@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8">
+  <title>WoT Battle Tracker</title>
+  <script src="https://unpkg.com/wotstat-widgets-sdk"></script>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: sans-serif;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      background: #121212;
+    }
+    .tracker {
+      background: rgba(0,0,0,0.6);
+      border: 2px solid #ffc107;
+      border-radius: 1em;
+      padding: 1rem;
+      width: 320px;
+      box-shadow: 0 0 10px rgba(255,193,7,0.5);
+      text-align: center;
+    }
+    .tracker h2 {
+      margin: 0 0 0.5rem;
+      color: #ffc107;
+    }
+    .tracker p {
+      margin: 0.3rem 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="tracker">
+    <h2>WoT Battle Tracker</h2>
+    <p>Кредити: <span id="credits">0</span></p>
+    <p>Бої: <span id="battles">0</span></p>
+    <p>Перемоги: <span id="wins">0</span></p>
+  </div>
+
+  <script type="module">
+    import { WidgetSDK } from 'https://unpkg.com/wotstat-widgets-sdk?module';
+    const sdk = new WidgetSDK();
+
+    let totalCredits = 0;
+    let battleCount = 0;
+    let winCount = 0;
+
+    const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyt5kK9Vs7hVNevK4JY4YiubPdErlFpTi8JQ50i7AkeaKMKelBcJMQz40uol7rxiCtbpA/exec";
+
+    function updateUI() {
+      document.getElementById('credits').textContent = totalCredits.toLocaleString();
+      document.getElementById('battles').textContent = battleCount;
+      document.getElementById('wins').textContent = winCount;
+    }
+
+    function sendToSheet(payload) {
+      const query = new URLSearchParams(payload).toString();
+      const url = `${SCRIPT_URL}?${query}`;
+
+      fetch(url)
+        .then(res => res.text())
+        .then(txt => console.log('Sheet response:', txt))
+        .catch(err => console.error('Sheet error:', err));
+    }
+
+    let lastPayloadHash = null;
+    let lastSendTime = 0;
+
+    sdk.data.battle.onBattleResult.watch(result => {
+      if (!result || !result.personal || !result.players) return;
+
+      const myId = sdk.data.player.id.value;
+      const now = new Date();
+      const mapName = sdk.data.map.name.value || '';
+
+      let totalCreditsThisBattle = 0;
+      let totalDamage = 0;
+      let totalAssist = 0;
+      let tanksUsed = [];
+
+      for (const [pid, personal] of Object.entries(result.personal)) {
+        const player = result.players[pid];
+        if (!player || player.accountDBID !== myId) continue;
+
+        const tank = player.vehicleType || '—';
+        const earned = personal.credits || 0;
+        const repair = personal.autoRepairCost || 0;
+        const equip = personal.autoEquipCost?.[0] || 0;
+        const load = personal.autoLoadCost?.[0] || 0;
+        const netCredits = earned - (repair + equip + load);
+        const damage = personal.damageDealt || 0;
+        const assist = (personal.damageAssisted || 0) + (personal.spottedAssisted || 0);
+
+        totalCreditsThisBattle += netCredits;
+        totalDamage += damage;
+        totalAssist += assist;
+        tanksUsed.push(tank);
+      }
+
+      if (tanksUsed.length === 0) return;
+
+      const myTeamId = result.players?.[myId]?.team;
+      const winner = result.common?.winnerTeam;
+      const isWin = myTeamId && winner && parseInt(myTeamId) === parseInt(winner);
+
+      battleCount++;
+      if (isWin) winCount++;
+      totalCredits += totalCreditsThisBattle;
+      updateUI();
+
+      const payload = {
+        time:    now.toLocaleString('uk-UA'),
+        battle:  battleCount,
+        tank:    tanksUsed.join(', '),
+        map:     mapName,
+        win:     isWin ? 'Перемога' : 'Поразка',
+        damage:  totalDamage,
+        assist:  totalAssist,
+        credits: totalCreditsThisBattle
+      };
+
+      const payloadHash = JSON.stringify(payload);
+      const nowTime = Date.now();
+
+      if (payloadHash === lastPayloadHash && nowTime - lastSendTime < 3000) {
+        console.log("🔁 Цей самий запис уже відправлено.");
+        return;
+      }
+
+      lastPayloadHash = payloadHash;
+      lastSendTime = nowTime;
+
+      console.log('📤 Надсилається сумарна статистика:', payload);
+      sendToSheet(payload);
+    });
+  </script>
+</body>
+</html>
