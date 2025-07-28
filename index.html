@@ -10,19 +10,18 @@
       padding: 0;
       font-family: sans-serif;
       color: #fff;
-      background: #111;
       display: flex;
       align-items: center;
       justify-content: center;
       height: 100vh;
     }
     .tracker {
-      background: #000;
+      background: rgba(0,0,0,0.5);
       border: 2px solid #ffc107;
       border-radius: 1em;
       padding: 1rem;
-      width: 320px;
-      box-shadow: 0 0 20px rgba(255,193,7,0.5);
+      width: 300px;
+      box-shadow: 0 0 10px rgba(255,193,7,0.5);
       text-align: center;
     }
     .tracker h2 {
@@ -64,67 +63,67 @@
 
       fetch(url)
         .then(res => res.text())
-        .then(txt => console.log('📥 Sheet response:', txt))
-        .catch(err => console.error('❌ Sheet error:', err));
+        .then(txt => console.log('Sheet response:', txt))
+        .catch(err => console.error('Sheet error:', err));
     }
 
+    let lastPayloadHash = null;
+    let lastSendTime = 0;
+
+    sdk.data.battle.isInBattle.watch(inBattle => {
+      if (inBattle) {
+        battleCount++;
+        updateUI();
+      }
+    });
+
     sdk.data.battle.onBattleResult.watch(result => {
-      if (!result || !result.personal || !result.players) return;
+      if (!result || !result.personal) return;
 
-      const myId = sdk.data.player.id.value;
-      const now = new Date();
-      const mapName = sdk.data.map.name.value || '';
+      const pid = Object.keys(result.personal)[0];
+      const personal = result.personal[pid];
+      const earned = personal.credits || 0;
+      const repair = personal.autoRepairCost || 0;
+      const equip  = personal.autoEquipCost?.[0] || 0;
+      const load   = personal.autoLoadCost?.[0] || 0;
+      const netCredits = earned - (repair + equip + load);
+      totalCredits += netCredits;
 
-      let myEntries = [];
-
-      for (const [pid, personal] of Object.entries(result.personal)) {
-        const player = result.players[pid];
-        if (!player || player.accountDBID !== myId) continue;
-
-        myEntries.push({ pid, personal, player });
-      }
-
-      if (myEntries.length === 0) {
-        console.warn("❗ Немає особистих даних у цьому бою.");
-        return;
-      }
-
-      // Лічильники тільки один раз
-      battleCount++;
-
-      const myTeamId = result.players?.[myId]?.team;
+      const myTeam = sdk.data.player.id.value;
+      const teamId = result.players[myTeam]?.team;
       const winner = result.common?.winnerTeam;
-      const isWin = myTeamId && winner && parseInt(myTeamId) === parseInt(winner);
+      const isWin = teamId && winner && parseInt(teamId) === parseInt(winner);
       if (isWin) winCount++;
+
+
+      const mapName  = sdk.data.map.name.value || '';
+      const damage   = personal.damageDealt || 0;
+      const assist   = (personal.damageAssisted || 0) + (personal.spottedAssisted || 0);
 
       updateUI();
 
-      myEntries.forEach(({ personal, player }) => {
-        const tank = player.vehicleType || '—';
-        const earned = personal.credits || 0;
-        const repair = personal.autoRepairCost || 0;
-        const equip = personal.autoEquipCost?.[0] || 0;
-        const load = personal.autoLoadCost?.[0] || 0;
-        const netCredits = earned - (repair + equip + load);
-        const damage = personal.damageDealt || 0;
-        const assist = (personal.damageAssisted || 0) + (personal.spottedAssisted || 0);
+      const now = new Date();
+      const payload = {
+        time:    now.toLocaleString('uk-UA'),
+        battle:  battleCount,
+     
+        map:     mapName,
+        win:     isWin ? 'Перемога' : 'Поразка',
+        damage:  damage,
+        assist:  assist,
+        credits: netCredits
+      };
 
-        totalCredits += netCredits;
+      const payloadHash = JSON.stringify(payload);
+      const nowTime = Date.now();
 
-        const payload = {
-          time:    now.toLocaleString('uk-UA'),
-          battle:  battleCount,
-          tank:    tank,
-          map:     mapName,
-          win:     isWin ? 'Перемога' : 'Поразка',
-          damage:  damage,
-          assist:  assist,
-          credits: netCredits
-        };
+   
 
-        console.log("📤 Надсилається:", payload);
-        sendToSheet(payload);
-      });
+      lastPayloadHash = payloadHash;
+      lastSendTime = nowTime;
+
+      console.log('📤 Надсилається:', payload);
+      sendToSheet(payload);
     });
   </script>
 </body>
