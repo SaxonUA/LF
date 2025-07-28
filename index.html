@@ -2,6 +2,7 @@
 <html lang="uk">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>WoT Battle Tracker</title>
   <script src="https://unpkg.com/wotstat-widgets-sdk"></script>
   <style>
@@ -10,26 +11,63 @@
       padding: 0;
       font-family: sans-serif;
       color: #fff;
+      background: #121212;
       display: flex;
+      flex-direction: column;
       align-items: center;
-      justify-content: center;
-      height: 100vh;
+      justify-content: flex-start;
+      min-height: 100vh;
     }
+
     .tracker {
-      background: rgba(0,0,0,0.5);
+      background: rgba(0, 0, 0, 0.5);
       border: 2px solid #ffc107;
       border-radius: 1em;
       padding: 1rem;
       width: 300px;
-      box-shadow: 0 0 10px rgba(255,193,7,0.5);
+      box-shadow: 0 0 10px rgba(255, 193, 7, 0.5);
       text-align: center;
+      margin-top: 2rem;
     }
+
     .tracker h2 {
       margin: 0 0 0.5rem;
       color: #ffc107;
     }
+
     .tracker p {
       margin: 0.3rem 0;
+    }
+
+    .results {
+      margin: 2rem auto;
+      width: 90%;
+      max-width: 800px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      color: #fff;
+      background: rgba(0,0,0,0.4);
+    }
+
+    th, td {
+      border: 1px solid #ffc107;
+      padding: 8px;
+      text-align: center;
+    }
+
+    th {
+      background-color: #ffc107;
+      color: #000;
+    }
+
+    caption {
+      caption-side: top;
+      font-size: 1.2rem;
+      margin-bottom: 0.5rem;
+      color: #ffc107;
     }
   </style>
 </head>
@@ -41,6 +79,25 @@
     <p>Перемоги: <span id="wins">0</span></p>
   </div>
 
+  <div class="results">
+    <table id="resultsTable">
+      <caption>Останні результати бою</caption>
+      <thead>
+        <tr>
+          <th>Танк</th>
+          <th>Карта</th>
+          <th>Результат</th>
+          <th>Шкода</th>
+          <th>Асист</th>
+          <th>Кредити</th>
+        </tr>
+      </thead>
+      <tbody id="resultsBody">
+        <tr><td colspan="6">Немає даних</td></tr>
+      </tbody>
+    </table>
+  </div>
+
   <script type="module">
     import { WidgetSDK } from 'https://unpkg.com/wotstat-widgets-sdk?module';
     const sdk = new WidgetSDK();
@@ -49,82 +106,4 @@
     let battleCount = 0;
     let winCount = 0;
 
-    const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyt5kK9Vs7hVNevK4JY4YiubPdErlFpTi8JQ50i7AkeaKMKelBcJMQz40uol7rxiCtbpA/exec";
-
-    function updateUI() {
-      document.getElementById('credits').textContent = totalCredits.toLocaleString();
-      document.getElementById('battles').textContent = battleCount;
-      document.getElementById('wins').textContent = winCount;
-    }
-
-    function sendToSheet(payload) {
-      const query = new URLSearchParams(payload).toString();
-      const url = `${SCRIPT_URL}?${query}`;
-
-      fetch(url)
-        .then(res => res.text())
-        .then(txt => console.log('Sheet response:', txt))
-        .catch(err => console.error('Sheet error:', err));
-    }
-
-    let lastPayloadHash = null;
-    let lastSendTime = 0;
-
-    sdk.data.battle.isInBattle.watch(inBattle => {
-      if (inBattle) {
-        battleCount++;
-        updateUI();
-      }
-    });
-
-    sdk.data.battle.onBattleResult.watch(result => {
-      if (!result || !result.personal) return;
-
-      const pid = Object.keys(result.personal)[0];
-      const personal = result.personal[pid];
-      const earned = personal.credits || 0;
-      const repair = personal.autoRepairCost || 0;
-      const equip  = personal.autoEquipCost?.[0] || 0;
-      const load   = personal.autoLoadCost?.[0] || 0;
-      const netCredits = earned - (repair + equip + load);
-      totalCredits += netCredits;
-
-      const myTeam = sdk.data.player.id.value;
-      const teamId = result.players[myTeam]?.team;
-      const winner = result.common?.winnerTeam;
-      const isWin = teamId && winner && parseInt(teamId) === parseInt(winner);
-      if (isWin) winCount++;
-
-
-      const mapName  = sdk.data.map.name.value || '';
-      const damage   = personal.damageDealt || 0;
-      const assist   = (personal.damageAssisted || 0) + (personal.spottedAssisted || 0);
-
-      updateUI();
-
-      const now = new Date();
-      const payload = {
-        time:    now.toLocaleString('uk-UA'),
-        battle:  battleCount,
-     
-        map:     mapName,
-        win:     isWin ? 'Перемога' : 'Поразка',
-        damage:  damage,
-        assist:  assist,
-        credits: netCredits
-      };
-
-      const payloadHash = JSON.stringify(payload);
-      const nowTime = Date.now();
-
-   
-
-      lastPayloadHash = payloadHash;
-      lastSendTime = nowTime;
-
-      console.log('📤 Надсилається:', payload);
-      sendToSheet(payload);
-    });
-  </script>
-</body>
-</html>
+    const SCRIPT_U_
